@@ -16,7 +16,7 @@ import { STRIPE } from './CheckoutPayments.plugin';
 
 export class CheckoutBillingContainerPlugin {
     around_getPaymentData = (args, callback, instance) => {
-        const [asyncData] = args;
+        const [, asyncData] = args;
         const { paymentMethod: code } = instance.state;
 
         if (code === STRIPE) {
