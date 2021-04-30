@@ -8,58 +8,88 @@
  * @package scandipwa/base-theme
  * @link https://github.com/scandipwa/base-theme
  */
+
+import CheckoutQuery from 'Query/Checkout.query';
+import { isSignedIn } from 'Util/Auth';
+import { fetchMutation } from 'Util/Request';
+
 export const STRIPE_AUTH_REQUIRED = 'Authentication Required: ';
+export const STRIPE_CODE = 'stripe_payments';
 
-export class CheckoutContainerPlugin {
-    preservePaymentInformation = (args, callback) => {
-        const [paymentInformation] = args;
+class CheckoutContainerPlugin {
+    _handleError(error, paymentInformation, handleAuthorization, instance) {
+        const [{ message = '' }] = error;
 
-        this.paymentInformation = paymentInformation;
-
-        return callback(...args);
-    };
-
-    stripeAuthorization = (args, callback, instance) => {
-        const [error] = args;
-        const { paymentInformation } = this;
-
-        if (!paymentInformation) {
-            return callback(...args);
-        }
-
-        const [{ debugMessage: message = '' }] = error;
-        const { paymentMethod: { handleAuthorization } } = paymentInformation;
-
-        if (handleAuthorization && message.startsWith(STRIPE_AUTH_REQUIRED)) {
-            const secret = message.substring(STRIPE_AUTH_REQUIRED.length);
+        if (handleAuthorization && message.includes(STRIPE_AUTH_REQUIRED)) {
+            const secret = this.getSecret(message);
+            instance.setState({ isLoading: false });
 
             handleAuthorization(
                 paymentInformation,
                 secret,
-                (newPaymentInformation) => instance.savePaymentInformation(newPaymentInformation)
-            ).then((success) => {
-                if (!success) {
-                    instance.setState({ isLoading: false });
-                }
-            });
+                (paymentInformation) => instance.savePaymentInformation(paymentInformation)
+            );
+        } else {
+            instance._handleError(error);
+        }
+    }
 
-            return null;
+    // eslint-disable-next-line consistent-return
+    savePaymentInformation = async (args, callback, instance) => {
+        const [{ stripeError = false }] = args;
+
+        if (stripeError) {
+            instance.setState({ isLoading: false });
+            return true;
         }
 
-        return callback(...args);
+        callback.apply(instance, args);
     };
+
+    savePaymentMethodAndPlaceOrder = async (args, callback, instance) => {
+        const [paymentInformation] = args;
+        const { paymentMethod: { code, additional_data, handleAuthorization } } = paymentInformation;
+        const guest_cart_id = !isSignedIn() ? instance._getGuestCartId() : '';
+
+        if (code !== STRIPE_CODE) {
+            callback.apply(instance, args);
+        }
+
+        try {
+            await fetchMutation(CheckoutQuery.getSetPaymentMethodOnCartMutation({
+                guest_cart_id,
+                payment_method: {
+                    code,
+                    [code]: additional_data
+                }
+            }));
+
+            const orderData = await fetchMutation(CheckoutQuery.getPlaceOrderMutation(guest_cart_id));
+            const { placeOrder: { order: { order_id } } } = orderData;
+
+            instance.setDetailsStep(order_id);
+        } catch (e) {
+            this._handleError(e, paymentInformation, handleAuthorization, instance);
+        }
+    };
+
+    getSecret(ics = '') {
+        const splitArray = ics.split(' ');
+
+        return `${ splitArray[splitArray.length - 1] }`;
+    }
 }
 
 const {
-    stripeAuthorization,
-    preservePaymentInformation
+    savePaymentMethodAndPlaceOrder,
+    savePaymentInformation
 } = new CheckoutContainerPlugin();
 
 export const config = {
     'Route/Checkout/Container': {
         'member-function': {
-            _handleError: stripeAuthorization,
-            savePaymentInformation: preservePaymentInformation
+            savePaymentMethodAndPlaceOrder,
+            savePaymentInformation
         }
     }
 };
