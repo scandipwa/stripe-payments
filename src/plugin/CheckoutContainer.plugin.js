@@ -34,7 +34,6 @@ class CheckoutContainerPlugin {
         }
     }
 
-    // eslint-disable-next-line consistent-return
     savePaymentInformation = async (args, callback, instance) => {
         const [{ stripeError = false }] = args;
 
@@ -44,6 +43,7 @@ class CheckoutContainerPlugin {
         }
 
         callback.apply(instance, args);
+        return true;
     };
 
     savePaymentMethodAndPlaceOrder = async (args, callback, instance) => {
