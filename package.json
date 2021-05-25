@@ -8,7 +8,7 @@
         "payment",
         "method"
     ],
-    "author": "Aleksandrs Bogackins <aleksandrs.bogackins@scandipwa.com>",
+    "author": "Aleksandrs Bogackins <aleksandrs.bogackins@scandiweb.com>",
     "license": "OSL-3.0",
     "dependencies": {
         "@stripe/react-stripe-js": "^1.4.0",
